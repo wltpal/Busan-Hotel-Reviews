@@ -1,0 +1,188 @@
+---
+title: "Busan Hotel Reviews"
+author: "지세미"
+date: "06/17/2024"
+output:
+    html_document:
+        code_folding: hide
+        fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+# Add any libraries and general settings up here.
+# I suggest you start with these two libraries, since you'll probably use them:
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(wordcloud2)
+library(sentimentr)
+library(RColorBrewer)
+```
+
+Write text and code here.
+
+# Executive summary
+
+Busan is a famous tourists spot especially during the summer, for both the city and beach experience all-in-one. One of the most important part of planning for a trip is booking hotels. This analysis examines Busan hotel reviews specifically in Booking.com to identify insights regarding customer satisfaction. Using automated text analysis, sentiment analysis, and visualization techniques, this analysis aims to know the main sentiments expressed in hotel reviews in Busan, what aspects of the hotel experience are most frequently mentioned in positive and negative reviews, and how hotel management can use these insights to improve customer satisfaction.
+By analyzing the text of the reviews, we can uncover common themes and sentiments that customers express, helping hotel managers to address issues and enhance the guest experience. The final graphic shows word clouds of the most common words in positive and negative reviews, providing a visual representation of what customers appreciate and what they find lacking.
+
+
+# Data background
+
+Explain where the data came from, what agency or company made it, how it is structured, what it shows, etc.
+
+The dataset used for this analysis is sourced from Kaggle, specifically from the following URL: https://www.kaggle.com/datasets/frogsohyun/bookingcom-hotel-review.
+It includes the hotel name, rating separated by positive or negative experience(s) the customer had(좋았던 점/아쉬웠던 점), and the cleaned version of the review comments.
+
+The dataset is structured as a CSV file and includes the following key columns:
+`HotelName`: The name of the hotel
+`Review`: The textual review provided by the customer
+`Rating`: The numeric rating given by the customer (1-10)
+`Date`: The date when the review was written
+`Reviewer`: The name or identifier of the reviewer
+
+# Data loading, cleaning and preprocessing
+```{r}
+# Directory and location of files were all good but the csv wouldn't load, so alternative coding was performed
+if (!requireNamespace("readr", quietly = TRUE)) {
+  install.packages("readr")
+}
+library(readr)
+
+file_path <- "booking.com_hotel_reviews.csv"
+
+# Check if the file exists
+if (!file.exists(file_path)) {
+  stop("The file does not exist. Please check the file path.")
+}
+
+# Load the dataset with readr package
+hotel_reviews <- tryCatch({
+  read_csv(file_path)
+}, error = function(e) {
+  stop("Error in reading the CSV file: ", e$message)
+})
+
+print(hotel_reviews)
+```
+
+
+Describe and show how you cleaned and reshaped the data
+
+# Text data analysis
+
+```{r}
+# Tokenize the reviews and remove stop words
+data(stop_words)
+tidy_reviews <- hotel_reviews %>%
+  unnest_tokens(word, cleaned_review) %>%
+  anti_join(stop_words)
+```
+
+# Individual analysis and figures
+
+## Anaysis and Figure 1
+
+Describe and show how you created the first figure. Why did you choose this figure type? 
+
+Bar graphs seemed ideal to visualize the amount of common words in the reviews. Also, the color 'navy' most-closely matched Booking.com's logo representative color.
+
+```{r}
+# Plot the most common words
+tidy_reviews %>%
+  count(word, sort = TRUE) %>%
+  top_n(20) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", fill = "navy") +
+  coord_flip() +
+  labs(title = "Most Common Words in Reviews",
+       x = "Word",
+       y = "Frequency")
+```
+
+## Anaysis and Figure 2
+
+```{r}
+tidy_reviews <- tidy_reviews %>%
+  mutate(Review = tolower(hotel_review)) %>%
+  unnest_tokens(word, hotel_review) %>%
+  anti_join(stop_words)
+
+# Perform sentiment analysis using Bing lexicon
+bing_word_counts <- tidy_reviews %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  count(word, sentiment, sort = TRUE)
+
+# Filter top positive and negative words
+top_positive_words <- bing_word_counts %>%
+  filter(sentiment == "positive") %>%
+  top_n(10, n)
+
+top_negative_words <- bing_word_counts %>%
+  filter(sentiment == "negative") %>%
+  top_n(10, n)
+
+top_words <- bind_rows(
+  mutate(top_positive_words, sentiment = "positive"),
+  mutate(top_negative_words, sentiment = "negative")
+)
+
+# Convert word and sentiment to factors for correct plotting order
+top_words <- top_words %>%
+  mutate(word = factor(word, levels = rev(unique(word))),
+         sentiment = factor(sentiment, levels = c("negative", "positive")))
+
+# Plot the sentiment scores
+ggplot(top_words, aes(x = word, y = n, fill = sentiment)) +
+  geom_col() +
+  labs(title = "Sentiment Analysis of Hotel Reviews in Busan",
+       y = "Frequency",
+       x = "Word") +
+  coord_flip()
+
+```
+
+```{r}
+tidy_reviews <- tidy_reviews %>%
+  mutate(Review = tolower(hotel_review)) %>%
+  unnest_tokens(word, hotel_review) %>%
+  anti_join(stop_words)
+
+bing_sentiments <- tidy_reviews %>%
+  inner_join(get_sentiments("bing"), by = "word")
+
+# Count the number of positive and negative reviews
+sentiment_counts <- bing_sentiments %>%
+  count(sentiment) %>%
+  mutate(sentiment = factor(sentiment, levels = c("negative", "positive")))
+
+ggplot(sentiment_counts, aes(x = sentiment, y = n, fill = sentiment)) +
+  geom_col() +
+  labs(title = "Comparison of Positive and Negative Reviews",
+       x = "Sentiment",
+       y = "Number of Reviews") +
+  scale_fill_manual(values = c("positive" = "green", "negative" = "red")) +
+  theme_minimal()
+```
+
+## Anaysis and Figure 3
+
+In showing the figures that you created, describe why you designed it the way you did. Why did you choose those colors, fonts, and other design elements? Does it convey truth?
+
+To convey the positive and negative words, separating them by the color that best represent each word cloud. The positive word cloud emphasizing aspects that customers appreciate the most, while the second one highlights areas where customers are dissatisfied, providing opportunities for improvement.
+
+```{r}
+# Word cloud for positive words
+wordcloud(words = top_positive_words$word, freq = top_positive_words$n,
+          min.freq = 5, max.words = 100, random.order = FALSE,
+          colors = brewer.pal(12, "Greens"))
+
+# Word cloud for negative words
+wordcloud(words = top_negative_words$word, freq = top_negative_words$n,
+          min.freq = 5, max.words = 100, random.order = FALSE,
+          colors = brewer.pal(11, "Reds"))
+```
+
+# Conclusion
+
+Our analysis reveals that while most customers are satisfied with their hotel experience in Busan, certain areas such as room cleanliness and value for money require attention. Hotel management should focus on these aspects to enhance overall customer satisfaction. By regularly monitoring and analyzing customer feedback, hotels can stay competitive and continuously improve their service quality.
